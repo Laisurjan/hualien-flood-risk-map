@@ -206,7 +206,13 @@
             <div class="layer-control">
                 <span style="font-weight: bold; color: #2c3e50;">圖層控制：</span>
                 <label><input type="checkbox" id="layerVillage" checked> 村里風險色塊（學生資料）</label>
-                <label><input type="checkbox" id="layerFlood"> 淹水潛勢圖（政府資料 24hr/200mm）</label>
+                <label><input type="checkbox" id="layerFlood"> 淹水潛勢圖</label>
+                <select id="floodScenarioSelect" style="font-size:0.85em;">
+                    <option value="24h200r">輕度 (24hr/200mm)</option>
+                    <option value="24h350r">中度 (24hr/350mm)</option>
+                    <option value="24h500r">強度 (24hr/500mm)</option>
+                    <option value="24h650r">極端 (24hr/650mm)</option>
+                </select>
             </div>
         </div>
 
@@ -412,7 +418,7 @@
                 attribution: '&copy; OpenStreetMap'
             }).addTo(map);
             addLegend();
-            loadFloodLayer();
+            loadFloodLayer(document.getElementById('floodScenarioSelect').value);
             await loadVillageBoundaries();
         }
 
@@ -472,19 +478,25 @@
         function highlightFeature(e) { e.target.setStyle({ weight: 3, color: '#2c3e50', fillOpacity: 0.8 }); e.target.bringToFront(); }
         function resetHighlight(e) { villageLayer.resetStyle(e.target); }
 
-        function loadFloodLayer() {
+        const floodColors = { '0-0.3': '#ffffb2', '0.3-0.5': '#fecc5c', '0.5-1': '#fd8d3c', '1-2': '#f03b20', '2-3': '#bd0026', '>3': '#800026' };
+        let floodVisible = false;
+
+        function loadFloodLayer(scenarioKey) {
             try {
-                if (typeof floodGeoJSON === 'undefined') throw new Error('flood_data.js 未載入');
-                const colors = { '0-0.3': '#ffffb2', '0.3-0.5': '#fecc5c', '0.5-1': '#fd8d3c', '1-2': '#f03b20', '2-3': '#bd0026', '>3': '#800026' };
-                floodLayer = L.geoJSON(floodGeoJSON, {
-                    style: f => ({ fillColor: colors[f.properties.type] || '#999', weight: 0.5, opacity: 0.6, color: '#666', fillOpacity: 0.5 }),
+                if (typeof floodScenarios === 'undefined') throw new Error('flood_data.js 未載入');
+                const data = floodScenarios[scenarioKey];
+                if (!data) throw new Error('找不到情境: ' + scenarioKey);
+                const wasVisible = floodVisible;
+                if (floodLayer) { map.removeLayer(floodLayer); }
+                floodLayer = L.geoJSON(data, {
+                    style: f => ({ fillColor: floodColors[f.properties.type] || '#999', weight: 0.5, opacity: 0.6, color: '#666', fillOpacity: 0.5 }),
                     onEachFeature: (f, layer) => layer.bindTooltip(`淹水深度：${f.properties.type} 公尺`)
                 });
+                if (wasVisible) floodLayer.addTo(map);
             } catch (error) {
                 console.error('載入淹水潛勢圖失敗:', error);
                 document.getElementById('layerFlood').disabled = true;
-                document.getElementById('layerFlood').parentElement.style.opacity = '0.5';
-                document.getElementById('layerFlood').parentElement.title = '淹水潛勢圖載入失敗';
+                document.getElementById('floodScenarioSelect').disabled = true;
             }
         }
 
@@ -493,7 +505,11 @@
                 this.checked ? villageLayer?.addTo(map) : map.removeLayer(villageLayer);
             });
             document.getElementById('layerFlood').addEventListener('change', function() {
-                this.checked ? floodLayer?.addTo(map) : map.removeLayer(floodLayer);
+                floodVisible = this.checked;
+                if (this.checked) { floodLayer?.addTo(map); } else { if (floodLayer) map.removeLayer(floodLayer); }
+            });
+            document.getElementById('floodScenarioSelect').addEventListener('change', function() {
+                loadFloodLayer(this.value);
             });
         }
 
