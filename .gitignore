@@ -1,0 +1,12 @@
+# Shapefile source data (too large, already converted)
+flood_shp/
+*.zip
+
+# Converted intermediate files
+hualien_flood_*.geojson
+
+# Claude Code
+.claude/
+claude.md
+CLAUDE.md
+nul
