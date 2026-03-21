@@ -187,6 +187,26 @@
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+        .data-sources {
+            background: rgba(255,255,255,0.95);
+            padding: 12px 20px;
+            text-align: center;
+            font-size: 0.8em;
+            color: #555;
+            border-top: 1px solid #ddd;
+        }
+        .data-sources a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        .data-sources a:hover {
+            text-decoration: underline;
+        }
+        .data-sources .source-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 4px;
+        }
     </style>
 </head>
 <body>
@@ -264,6 +284,18 @@
             <button class="btn-danger" onclick="clearAllData()">清除全部</button>
         </div>
     </section>
+
+    <footer class="data-sources">
+        <div class="source-title">資料來源說明</div>
+        <div>
+            淹水潛勢圖：<a href="https://data.gov.tw/dataset/25766" target="_blank">經濟部水利署（政府資料開放平臺）</a>｜
+            村里邊界：<a href="https://github.com/rontrol/taiwan-atlas" target="_blank">Taiwan Atlas (內政部國土測繪中心)</a>｜
+            底圖：<a href="https://www.openstreetmap.org/" target="_blank">OpenStreetMap</a>
+        </div>
+        <div style="margin-top: 4px; color: #888;">
+            淹水潛勢圖係依設計降雨情境模擬，僅供防災參考，不得作為土地使用管制依據
+        </div>
+    </footer>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
