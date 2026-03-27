@@ -123,6 +123,83 @@
         .legend-color { width: 20px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.2); }
         .village-tooltip { font-size: 0.9em; padding: 8px 12px; }
         #fileInput { display: none; }
+        .input-section.locked .input-row,
+        .input-section.locked .data-info .btn-secondary:nth-child(2),
+        .input-section.locked .data-info .btn-danger {
+            pointer-events: none;
+            opacity: 0.4;
+            user-select: none;
+        }
+        .input-section.locked .data-info .btn-secondary:first-child {
+            pointer-events: auto;
+            opacity: 1;
+        }
+        .unlock-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .btn-unlock {
+            padding: 6px 16px;
+            border: 2px solid #667eea;
+            border-radius: 6px;
+            background: white;
+            color: #667eea;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        .btn-unlock:hover { background: #667eea; color: white; }
+        .btn-lock {
+            padding: 6px 16px;
+            border: 2px solid #e74c3c;
+            border-radius: 6px;
+            background: white;
+            color: #e74c3c;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        .btn-lock:hover { background: #e74c3c; color: white; }
+        .lock-status {
+            font-size: 0.85em;
+            color: #999;
+        }
+        .lock-status.unlocked { color: #27ae60; font-weight: bold; }
+        .password-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 3000;
+            justify-content: center;
+            align-items: center;
+        }
+        .password-modal.active { display: flex; }
+        .password-box {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+            text-align: center;
+            min-width: 320px;
+        }
+        .password-box h3 { margin-bottom: 15px; color: #2c3e50; }
+        .password-box input[type="password"] {
+            width: 100%;
+            padding: 10px 15px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 1em;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .password-box input[type="password"]:focus { outline: none; border-color: #667eea; }
+        .password-box .pw-buttons { display: flex; gap: 10px; justify-content: center; }
+        .password-box .pw-error { color: #e74c3c; font-size: 0.85em; margin-bottom: 10px; display: none; }
         @media (max-width: 1024px) {
             .main-container { flex-direction: column; flex: none; height: auto; overflow: visible; }
             .sidebar { flex-direction: row; max-width: 100%; min-width: 0; overflow-y: visible; }
@@ -248,7 +325,24 @@
         </div>
     </div>
 
-    <section class="input-section">
+    <div id="passwordModal" class="password-modal">
+        <div class="password-box">
+            <h3>請輸入編輯密碼</h3>
+            <div id="pwError" class="pw-error">密碼錯誤，請重新輸入</div>
+            <input type="password" id="passwordInput" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')verifyPassword()">
+            <div class="pw-buttons">
+                <button class="btn-primary" onclick="verifyPassword()">確認</button>
+                <button class="btn-secondary" onclick="closePasswordModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <section class="input-section locked" id="inputSection">
+        <div class="unlock-bar">
+            <button class="btn-unlock" id="unlockBtn" onclick="openPasswordModal()">🔒 解鎖編輯</button>
+            <button class="btn-lock" id="lockBtn" onclick="lockEditing()" style="display:none;">🔓 鎖定</button>
+            <span class="lock-status" id="lockStatus">目前為唯讀模式，需輸入密碼才能編輯資料</span>
+        </div>
         <div class="input-row">
             <div class="input-group">
                 <label>鄉鎮：</label>
@@ -594,12 +688,95 @@
             villageLayer?.setStyle(getVillageStyle);
         }
 
+        // ===== 密碼保護機制 =====
+        // 預設密碼雜湊 (SHA-256)，修改密碼請用瀏覽器 console 執行：
+        // crypto.subtle.digest('SHA-256', new TextEncoder().encode('你的新密碼')).then(h => console.log(Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join('')))
+        const PASSWORD_HASH = '72013776a362f20a0d1b902bd2c551f8ced958a6fa63b5275d8b668d9efaa8fd';
+
+        async function sha256(text) {
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function isUnlocked() {
+            return sessionStorage.getItem('floodMapUnlocked') === 'true';
+        }
+
+        function updateLockUI() {
+            const section = document.getElementById('inputSection');
+            const unlockBtn = document.getElementById('unlockBtn');
+            const lockBtn = document.getElementById('lockBtn');
+            const status = document.getElementById('lockStatus');
+            if (isUnlocked()) {
+                section.classList.remove('locked');
+                unlockBtn.style.display = 'none';
+                lockBtn.style.display = '';
+                status.textContent = '已解鎖，可編輯資料';
+                status.className = 'lock-status unlocked';
+            } else {
+                section.classList.add('locked');
+                unlockBtn.style.display = '';
+                lockBtn.style.display = 'none';
+                status.textContent = '目前為唯讀模式，需輸入密碼才能編輯資料';
+                status.className = 'lock-status';
+            }
+        }
+
+        function openPasswordModal() {
+            document.getElementById('passwordModal').classList.add('active');
+            document.getElementById('passwordInput').value = '';
+            document.getElementById('pwError').style.display = 'none';
+            setTimeout(() => document.getElementById('passwordInput').focus(), 100);
+        }
+
+        function closePasswordModal() {
+            document.getElementById('passwordModal').classList.remove('active');
+        }
+
+        async function verifyPassword() {
+            const pw = document.getElementById('passwordInput').value;
+            if (!pw) return;
+            const hash = await sha256(pw);
+            if (hash === PASSWORD_HASH) {
+                sessionStorage.setItem('floodMapUnlocked', 'true');
+                closePasswordModal();
+                updateLockUI();
+            } else {
+                document.getElementById('pwError').style.display = 'block';
+                document.getElementById('passwordInput').value = '';
+                document.getElementById('passwordInput').focus();
+            }
+        }
+
+        function lockEditing() {
+            sessionStorage.removeItem('floodMapUnlocked');
+            updateLockUI();
+        }
+
+        // 攔截需要密碼的操作
+        const _origAddData = addData;
+        addData = function() {
+            if (!isUnlocked()) { openPasswordModal(); return; }
+            _origAddData();
+        };
+        const _origClearAllData = clearAllData;
+        clearAllData = function() {
+            if (!isUnlocked()) { openPasswordModal(); return; }
+            _origClearAllData();
+        };
+        const _origImportData = importData;
+        importData = function(event) {
+            if (!isUnlocked()) { openPasswordModal(); event.target.value = ''; return; }
+            _origImportData(event);
+        };
+
         document.addEventListener('DOMContentLoaded', async function() {
             initSelects();
             initCharts();
             initLayerControl();
             await initMap();
             updateUI();
+            updateLockUI();
         });
     </script>
 </body>
