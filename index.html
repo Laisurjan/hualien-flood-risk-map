@@ -264,6 +264,21 @@
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+        .data-table-card { max-height: 300px; overflow-y: auto; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+        .data-table th {
+            position: sticky; top: 0;
+            background: #2c3e50; color: white;
+            padding: 6px 8px; text-align: left; font-weight: normal;
+        }
+        .data-table td { padding: 5px 8px; border-bottom: 1px solid #eee; }
+        .data-table tr:hover td { background: #f0f4ff; }
+        .data-table .risk-dot {
+            display: inline-block; width: 10px; height: 10px;
+            border-radius: 50%; margin-right: 4px; vertical-align: middle;
+        }
+        .data-table .no-map { color: #e67e22; font-size: 0.85em; }
+        .data-table-empty { text-align: center; color: #999; padding: 20px 0; font-size: 0.9em; }
         .data-sources {
             background: rgba(255,255,255,0.95);
             padding: 12px 20px;
@@ -321,6 +336,12 @@
             <div class="chart-card">
                 <h3>四項評估得分分布</h3>
                 <div class="chart-container"><canvas id="scoreChart"></canvas></div>
+            </div>
+            <div class="chart-card data-table-card">
+                <h3>已輸入資料一覽</h3>
+                <div id="dataTableContainer">
+                    <div class="data-table-empty">尚無資料</div>
+                </div>
             </div>
         </div>
     </div>
@@ -396,17 +417,17 @@
     <script src="flood_data.js"></script>
     <script>
         const hualienDistricts = {
-            "花蓮市": ["民立里","民運里","民族里","主信里","主睦里","主和里","國威里","國風里","民德里","民意里","民治里","主義里","主工里","主農里","國治里","國富里","民政里","民勤里","民生里","主商里","主學里","國光里","國聯里","國強里","民心里","民樂里","民主里","主勤里","主力里","國安里","國魂里","國慶里","民享里","民有里","民權里","主計里","主權里","國華里","國防里","國福里","國裕里","民本里","民魂里","主幹里","主動里","主政里","國權里","國泰里","民國里","國計里","主儉里","國民里"],
-            "鳳林鎮": ["鳳仁里","鳳義里","鳳禮里","鳳智里","鳳信里","山興里","大榮里","北林里","南平里","林榮里","長橋里","森榮里","鳳光里","鳳明里","原林里","中埔里","大觀里"],
-            "玉里鎮": ["中城里","啟模里","永昌里","泰昌里","國武里","源城里","長良里","樂合里","東豐里","觀音里","松浦里","春日里","德武里","三民里","大禹里","華康里","民安里","水源里","石坑里","客城里","麻汝里","光復里","三軒里"],
-            "新城鄉": ["新城村","順安村","康樂村","北埔村","佳林村","嘉里村","嘉新村","大漢村"],
-            "吉安鄉": ["北昌村","勝安村","太昌村","永安村","慶豐村","吉安村","福興村","南華村","干城村","永興村","稻香村","南昌村","宜昌村","仁里村","東昌村","仁安村","仁和村","光華村","化仁村"],
-            "壽豐鄉": ["樹湖村","溪口村","豐山村","豐裡村","豐坪村","共和村","壽豐村","光榮村","池南村","平和村","志學村","米棧村","月眉村","水璉村","鹽寮村","共榮村","民主村","吳全村"],
-            "光復鄉": ["大安村","大華村","大平村","大馬村","大同村","大進村","大全村","大興村","大富村","大豐村","東富村","西富村","南富村","北富村","大農村"],
-            "豐濱鄉": ["豐濱村","新社村","磯崎村","港口村","靜浦村"],
-            "瑞穗鄉": ["瑞穗村","瑞美村","瑞良村","瑞祥村","瑞北村","舞鶴村","鶴岡村","奇美村","富源村","富民村","富興村","瑞西村"],
-            "富里鄉": ["吳江村","東里村","萬寧村","新興村","竹田村","羅山村","石牌村","明里村","富里村","永豐村","豐南村","富南村","學田村","干城新村","大里村","三台村"],
-            "秀林鄉": ["崇德村","富世村","秀林村","水源村","銅門村","文蘭村","景美村","佳民村","和平村","佐倉村"],
+            "花蓮市": ["民心里","民孝里","民樂里","民運里","民享里","民德里","民立里","民勤里","民意里","民政里","民主里","民治里","民生里","民族里","民有里","民權里","主計里","主義里","主工里","主信里","主商里","主勤里","主學里","主睦里","主力里","主權里","主農里","主安里","主和里","國治里","國威里","國聯里","國光里","國盛里","國風里","國防里","國魂里","國安里","國華里","國福里","國強里","國慶里","國興里","國富里","國裕里"],
+            "鳳林鎮": ["鳳仁里","鳳義里","鳳禮里","鳳智里","鳳信里","山興里","大榮里","北林里","南平里","林榮里","長橋里","森榮里"],
+            "玉里鎮": ["中城里","國武里","泰昌里","啟模里","永昌里","源城里","長良里","三民里","大禹里","樂合里","東豐里","觀音里","松浦里","春日里","德武里"],
+            "新城鄉": ["新城村","順安村","康樂村","北埔村","大漢村","嘉里村","佳林村","嘉新村"],
+            "吉安鄉": ["太昌村","北昌村","永安村","宜昌村","南昌村","勝安村","干城村","吉安村","南華村","福興村","慶豐村","仁安村","仁里村","仁和村","永興村","光華村","東昌村","稻香村"],
+            "壽豐鄉": ["壽豐村","共和村","光榮村","池南村","平和村","志學村","月眉村","溪口村","樹湖村","豐山村","豐裡村","米棧村","豐坪村","鹽寮村","水璉村"],
+            "光復鄉": ["大華村","大安村","大同村","大平村","大馬村","大進村","東富村","西富村","南富村","北富村","大全村","大興村","大富村","大豐村"],
+            "豐濱鄉": ["磯崎村","新社村","豐濱村","港口村","靜浦村"],
+            "瑞穗鄉": ["瑞穗村","瑞美村","瑞良村","瑞祥村","瑞北村","舞鶴村","鶴岡村","奇美村","富源村","富民村","富興村"],
+            "富里鄉": ["吳江村","東里村","萬寧村","新興村","竹田村","羅山村","石牌村","明里村","富里村","永豐村","豐南村","富南村","學田村"],
+            "秀林鄉": ["和平村","崇德村","富世村","秀林村","景美村","佳民村","水源村","銅門村","文蘭村"],
             "萬榮鄉": ["西林村","見晴村","萬榮村","明利村","馬遠村","紅葉村"],
             "卓溪鄉": ["崙山村","立山村","太平村","卓溪村","卓清村","古風村"]
         };
@@ -682,9 +703,39 @@
             scoreChart.update();
         }
 
+        function updateDataTable() {
+            const container = document.getElementById('dataTableContainer');
+            if (!studentData.length) {
+                container.innerHTML = '<div class="data-table-empty">尚無資料</div>';
+                return;
+            }
+            const grouped = {};
+            studentData.forEach(d => {
+                const key = d.district + '_' + d.village;
+                if (!grouped[key]) grouped[key] = { district: d.district, village: d.village, entries: [] };
+                grouped[key].entries.push(d);
+            });
+            let html = '<table class="data-table"><thead><tr><th>鄉鎮</th><th>村里</th><th>筆數</th><th>平均</th><th>風險等級</th></tr></thead><tbody>';
+            Object.values(grouped).forEach(g => {
+                const avg = g.entries.reduce((s, d) => s + d.total, 0) / g.entries.length;
+                const risk = getRiskLevel(Math.round(avg));
+                const hasMap = !!villageBoundaries[g.district + '_' + g.village];
+                html += '<tr>';
+                html += '<td>' + g.district + '</td>';
+                html += '<td>' + g.village + (!hasMap ? ' <span class="no-map" title="此村里無地圖邊界">*</span>' : '') + '</td>';
+                html += '<td>' + g.entries.length + '</td>';
+                html += '<td>' + avg.toFixed(1) + '</td>';
+                html += '<td><span class="risk-dot" style="background:' + risk.color + ';"></span>' + risk.level + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
         function updateUI() {
             document.getElementById('dataCount').textContent = studentData.length;
             updateCharts();
+            updateDataTable();
             villageLayer?.setStyle(getVillageStyle);
         }
 
