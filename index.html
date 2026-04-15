@@ -299,6 +299,72 @@
             color: #2c3e50;
             margin-bottom: 4px;
         }
+        /* 即時天災資訊卡片 */
+        .disaster-info-card h3 {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            user-select: none;
+            margin-bottom: 0;
+        }
+        .disaster-info-card h3.open { margin-bottom: 10px; }
+        .disaster-status-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+            background: #95a5a6;
+        }
+        .disaster-status-dot.green { background: #4CAF50; }
+        .disaster-status-dot.orange { background: #FF9800; }
+        .disaster-status-dot.red { background: #e74c3c; }
+        .disaster-toggle { margin-left: auto; font-size: 0.8em; color: #999; }
+        .disaster-content { font-size: 0.85em; }
+        .disaster-section-title {
+            font-size: 0.8em; color: #7f8c8d;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 4px; margin: 10px 0 6px;
+        }
+        .disaster-warning {
+            padding: 8px 10px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        .disaster-warning.green { background: #e8f5e9; border-left: 4px solid #4CAF50; color: #2e7d32; }
+        .disaster-warning.orange { background: #fff3e0; border-left: 4px solid #FF9800; color: #e65100; }
+        .disaster-warning.red { background: #fde8e8; border-left: 4px solid #e74c3c; color: #c62828; }
+        .disaster-rain-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
+        .disaster-rain-table th {
+            background: #ecf0f1; padding: 4px 6px;
+            text-align: left; font-weight: bold; font-size: 0.9em; color: #2c3e50;
+        }
+        .disaster-rain-table td { padding: 3px 6px; border-bottom: 1px solid #f0f0f0; }
+        .disaster-rain-table tr:hover td { background: #f0f4ff; }
+        .disaster-rain-high { color: #e74c3c; font-weight: bold; }
+        .disaster-rain-med { color: #FF9800; font-weight: bold; }
+        .disaster-quake-info { padding: 6px 0; line-height: 1.5; }
+        .disaster-quake-mag { font-weight: bold; font-size: 1.1em; }
+        .disaster-footer {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-top: 10px; padding-top: 8px; border-top: 1px solid #eee;
+            font-size: 0.8em; color: #999;
+        }
+        .disaster-refresh-btn {
+            background: none; border: 1px solid #ddd; border-radius: 4px;
+            padding: 2px 8px; cursor: pointer; font-size: 0.9em; color: #666;
+        }
+        .disaster-refresh-btn:hover { background: #f0f0f0; }
+        .disaster-no-key {
+            text-align: center; padding: 15px 10px; color: #999;
+        }
+        .disaster-no-key a { color: #3498db; }
+        .disaster-error { color: #e74c3c; font-size: 0.85em; padding: 4px 0; }
+        @media (max-width: 1024px) {
+            .disaster-info-card { flex: 1 1 100% !important; order: -1; }
+        }
     </style>
 </head>
 <body>
@@ -329,6 +395,16 @@
         </div>
 
         <div class="sidebar">
+            <div class="chart-card disaster-info-card">
+                <h3 class="open" onclick="toggleDisasterPanel()">
+                    <span class="disaster-status-dot" id="disasterDot"></span>
+                    即時天災資訊
+                    <span class="disaster-toggle" id="disasterToggle">▼</span>
+                </h3>
+                <div id="disasterContent" class="disaster-content">
+                    <div style="text-align:center; color:#999; padding:10px 0;">載入中...</div>
+                </div>
+            </div>
             <div class="chart-card">
                 <h3>全班風險等級分布</h3>
                 <div class="chart-container"><canvas id="riskChart"></canvas></div>
@@ -405,7 +481,8 @@
         <div>
             淹水潛勢圖：<a href="https://data.gov.tw/dataset/25766" target="_blank">經濟部水利署（政府資料開放平臺）</a>｜
             村里邊界：<a href="https://github.com/rontrol/taiwan-atlas" target="_blank">Taiwan Atlas (內政部國土測繪中心)</a>｜
-            底圖：<a href="https://www.openstreetmap.org/" target="_blank">OpenStreetMap</a>
+            底圖：<a href="https://www.openstreetmap.org/" target="_blank">OpenStreetMap</a>｜
+            即時天災資訊：<a href="https://opendata.cwa.gov.tw/" target="_blank">中央氣象署開放資料</a>
         </div>
         <div style="margin-top: 4px; color: #888;">
             淹水潛勢圖係依設計降雨情境模擬，僅供防災參考，不得作為土地使用管制依據
@@ -844,12 +921,194 @@
             _origImportData(event);
         };
 
+        // ===== 即時天災資訊模組 =====
+        const CWA_API_KEY = 'CWA-A9205943-43D8-4D86-BF1C-6C60B2459008';
+        const CWA_BASE = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/';
+        const DISASTER_REFRESH_MS = 5 * 60 * 1000;
+        let disasterTimer = null;
+
+        async function fetchCWA(datasetId, params = {}) {
+            if (!CWA_API_KEY) return null;
+            const url = new URL(CWA_BASE + datasetId);
+            url.searchParams.set('Authorization', CWA_API_KEY);
+            Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const json = await resp.json();
+            return json.records;
+        }
+
+        async function fetchWeatherWarnings() {
+            const records = await fetchCWA('W-C0033-001');
+            if (!records) return null;
+            const warnings = [];
+            const locations = records.location || [];
+            locations.forEach(loc => {
+                if (loc.locationName !== '花蓮縣') return;
+                const hazards = loc.hazardConditions?.hazards || [];
+                hazards.forEach(h => {
+                    const info = h.info || {};
+                    const phenomena = h.phenomena || '氣象特報';
+                    const significance = h.significance || '';
+                    warnings.push({
+                        type: phenomena + significance,
+                        content: info.language || '',
+                        severity: significance.includes('警報') ? 'red' : 'orange',
+                        time: info.startTime ? info.startTime + ' ~ ' + (info.endTime || '') : ''
+                    });
+                });
+            });
+            return warnings;
+        }
+
+        async function fetchRainfallData() {
+            const records = await fetchCWA('O-A0002-001');
+            if (!records) return null;
+            const stations = [];
+            const allStations = records.Station || [];
+            allStations.forEach(s => {
+                if (s.GeoInfo?.CountyName !== '花蓮縣') return;
+                const name = s.StationName || '';
+                const obs = s.RainfallElement || {};
+                const hourly = parseFloat(obs.Past1hr?.Precipitation) || 0;
+                const daily = parseFloat(obs.Past24hr?.Precipitation) || 0;
+                if (hourly >= 0 && daily >= 0) stations.push({ name, hourly, daily });
+            });
+            stations.sort((a, b) => b.daily - a.daily);
+            return stations.slice(0, 5);
+        }
+
+        async function fetchEarthquakeData() {
+            const records = await fetchCWA('E-A0015-001', { limit: '3' });
+            if (!records) return null;
+            const quakes = records.Earthquake || [];
+            if (!quakes.length) return null;
+            const q = quakes[0];
+            const info = q.EarthquakeInfo || {};
+            const mag = info.EarthquakeMagnitude?.MagnitudeValue || '';
+            const depth = info.FocalDepth || '';
+            const loc = info.Epicenter?.Location || '';
+            const time = info.OriginTime || '';
+            let hualienIntensity = '';
+            const areas = q.Intensity?.ShakingArea || [];
+            areas.forEach(area => {
+                if (area.CountyName?.includes('花蓮')) {
+                    hualienIntensity = area.AreaIntensity || '';
+                }
+            });
+            return { mag, depth, loc, time, hualienIntensity, content: q.ReportContent || '' };
+        }
+
+        function renderDisasterPanel(warnings, rainfall, earthquake) {
+            const content = document.getElementById('disasterContent');
+            const dot = document.getElementById('disasterDot');
+            if (!CWA_API_KEY) {
+                content.innerHTML = '<div class="disaster-no-key">請設定 CWA API 授權碼以啟用即時資訊<br><a href="https://opendata.cwa.gov.tw/" target="_blank">免費申請</a></div>';
+                return;
+            }
+            let html = '';
+            let dotClass = 'green';
+            // 氣象特報
+            if (warnings === null) {
+                html += '<div class="disaster-error">氣象特報載入失敗</div>';
+            } else if (warnings.length === 0) {
+                html += '<div class="disaster-warning green">目前花蓮地區無氣象特報</div>';
+            } else {
+                dotClass = warnings.some(w => w.severity === 'red') ? 'red' : 'orange';
+                warnings.forEach(w => {
+                    html += '<div class="disaster-warning ' + w.severity + '">';
+                    html += '<strong>' + w.type + '</strong>';
+                    if (w.content) html += '<br>' + w.content;
+                    if (w.time) html += '<br><small>' + w.time + '</small>';
+                    html += '</div>';
+                });
+            }
+            // 即時雨量
+            html += '<div class="disaster-section-title">花蓮即時雨量 (前5站)</div>';
+            if (rainfall === null) {
+                html += '<div class="disaster-error">雨量資料載入失敗</div>';
+            } else if (rainfall.length === 0) {
+                html += '<div style="color:#999; font-size:0.9em;">目前無雨量資料</div>';
+            } else {
+                html += '<table class="disaster-rain-table"><thead><tr><th>測站</th><th>時雨量</th><th>日累積</th></tr></thead><tbody>';
+                rainfall.forEach(s => {
+                    const dailyClass = s.daily >= 350 ? 'disaster-rain-high' : s.daily >= 200 ? 'disaster-rain-med' : '';
+                    html += '<tr><td>' + s.name + '</td>';
+                    html += '<td>' + s.hourly.toFixed(1) + ' mm</td>';
+                    html += '<td class="' + dailyClass + '">' + s.daily.toFixed(1) + ' mm</td></tr>';
+                });
+                html += '</tbody></table>';
+            }
+            // 地震
+            html += '<div class="disaster-section-title">近期地震</div>';
+            if (earthquake === null) {
+                html += '<div class="disaster-error">地震資料載入失敗</div>';
+            } else {
+                html += '<div class="disaster-quake-info">';
+                html += '<span class="disaster-quake-mag">M ' + earthquake.mag + '</span>';
+                if (earthquake.content) {
+                    html += '<br>' + earthquake.content;
+                } else {
+                    if (earthquake.loc) html += ' ' + earthquake.loc;
+                    if (earthquake.depth) html += '<br>深度 ' + earthquake.depth + ' km';
+                    if (earthquake.hualienIntensity) html += '｜花蓮震度 ' + earthquake.hualienIntensity;
+                    if (earthquake.time) html += '<br><small>' + earthquake.time + '</small>';
+                }
+                html += '</div>';
+            }
+            // footer
+            const now = new Date();
+            html += '<div class="disaster-footer">';
+            html += '<span>更新: ' + now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + '</span>';
+            html += '<button class="disaster-refresh-btn" onclick="refreshDisasterInfo()">重新整理</button>';
+            html += '</div>';
+            content.innerHTML = html;
+            dot.className = 'disaster-status-dot ' + dotClass;
+        }
+
+        async function refreshDisasterInfo() {
+            const [w, r, e] = await Promise.allSettled([
+                fetchWeatherWarnings(),
+                fetchRainfallData(),
+                fetchEarthquakeData()
+            ]);
+            renderDisasterPanel(
+                w.status === 'fulfilled' ? w.value : null,
+                r.status === 'fulfilled' ? r.value : null,
+                e.status === 'fulfilled' ? e.value : null
+            );
+        }
+
+        function toggleDisasterPanel() {
+            const content = document.getElementById('disasterContent');
+            const toggle = document.getElementById('disasterToggle');
+            const header = content.parentElement.querySelector('h3');
+            const hidden = content.style.display === 'none';
+            content.style.display = hidden ? 'block' : 'none';
+            toggle.textContent = hidden ? '▼' : '▶';
+            header.className = hidden ? 'open' : '';
+        }
+
+        function startDisasterRefresh() {
+            refreshDisasterInfo();
+            disasterTimer = setInterval(refreshDisasterInfo, DISASTER_REFRESH_MS);
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    clearInterval(disasterTimer);
+                } else {
+                    refreshDisasterInfo();
+                    disasterTimer = setInterval(refreshDisasterInfo, DISASTER_REFRESH_MS);
+                }
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', async function() {
             initSelects();
             initCharts();
             initLayerControl();
             await initMap();
             updateLockUI();
+            startDisasterRefresh();
             // 如果 Firebase 資料庫是空的，上傳預設資料
             dataRef.once('value').then(snapshot => {
                 if (!snapshot.exists() && typeof DEFAULT_STUDENT_DATA !== 'undefined' && DEFAULT_STUDENT_DATA.length > 0) {
