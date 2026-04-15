@@ -415,6 +415,9 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
     <script src="flood_data.js"></script>
+    <script src="default_data.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
     <script>
         const hualienDistricts = {
             "花蓮市": ["民心里","民孝里","民樂里","民運里","民享里","民德里","民立里","民勤里","民意里","民政里","民主里","民治里","民生里","民族里","民有里","民權里","主計里","主義里","主工里","主信里","主商里","主勤里","主學里","主睦里","主力里","主權里","主農里","主安里","主和里","國治里","國威里","國聯里","國光里","國盛里","國風里","國防里","國魂里","國安里","國華里","國福里","國強里","國慶里","國興里","國富里","國裕里"],
@@ -439,22 +442,42 @@
             return { level: "高風險", color: "#F44336", rate: "50%" };
         }
 
+        // Firebase 初始化
+        const firebaseApp = firebase.initializeApp({
+            apiKey: "AIzaSyDGWGhNG7y4WhzZuw9kbRnWVPqTfyA6XR0",
+            authDomain: "hualien-flood-risk-map.firebaseapp.com",
+            databaseURL: "https://hualien-flood-risk-map-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "hualien-flood-risk-map",
+            storageBucket: "hualien-flood-risk-map.firebasestorage.app",
+            messagingSenderId: "277087133764",
+            appId: "1:277087133764:web:407efa6eefca1799fd1c11"
+        });
+        const db = firebase.database();
+        const dataRef = db.ref('studentData');
+
         let studentData = [];
-        try {
-            studentData = JSON.parse(localStorage.getItem('hualienFloodData') || '[]');
-        } catch (e) {
-            console.error('localStorage 資料損壞，已重置:', e);
-            localStorage.removeItem('hualienFloodData');
-        }
+        let firebaseReady = false;
+
+        // 監聽 Firebase 資料變化，所有人即時同步
+        dataRef.on('value', (snapshot) => {
+            const val = snapshot.val();
+            studentData = val ? Object.values(val) : [];
+            firebaseReady = true;
+            updateUI();
+        }, (error) => {
+            console.error('Firebase 讀取失敗，使用預設資料:', error);
+            studentData = (typeof DEFAULT_STUDENT_DATA !== 'undefined') ? [...DEFAULT_STUDENT_DATA] : [];
+            firebaseReady = true;
+            updateUI();
+        });
 
         function saveData() {
-            try {
-                localStorage.setItem('hualienFloodData', JSON.stringify(studentData));
-            } catch (e) {
-                showError('儲存失敗：儲存空間可能已滿');
-                console.error('localStorage 儲存失敗:', e);
-            }
-            updateUI();
+            const dataObj = {};
+            studentData.forEach(d => { dataObj[d.id] = d; });
+            dataRef.set(dataObj).catch(e => {
+                showError('儲存失敗：' + e.message);
+                console.error('Firebase 儲存失敗:', e);
+            });
         }
 
         function generateId() { return 'id-' + Date.now() + '-' + Math.random().toString(36).substring(2, 11); }
@@ -826,8 +849,15 @@
             initCharts();
             initLayerControl();
             await initMap();
-            updateUI();
             updateLockUI();
+            // 如果 Firebase 資料庫是空的，上傳預設資料
+            dataRef.once('value').then(snapshot => {
+                if (!snapshot.exists() && typeof DEFAULT_STUDENT_DATA !== 'undefined' && DEFAULT_STUDENT_DATA.length > 0) {
+                    const dataObj = {};
+                    DEFAULT_STUDENT_DATA.forEach(d => { dataObj[d.id] = d; });
+                    dataRef.set(dataObj);
+                }
+            });
         });
     </script>
 </body>
